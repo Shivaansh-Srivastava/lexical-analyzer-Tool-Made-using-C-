@@ -1,0 +1,6 @@
+<RCC>
+    <qresource prefix="/images">
+        <file>images/qt_main_window_icon.png</file>
+    </qresource>
+    <qresource prefix="/database"/>
+</RCC>
