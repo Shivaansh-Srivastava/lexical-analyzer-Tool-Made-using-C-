@@ -20,6 +20,7 @@
 #include <QtSql/QSqlDatabase>
 #include <QSqlQuery>
 #include <QSqlQueryModel>
+#include <QStandardPaths>
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -29,8 +30,15 @@ MainWindow::MainWindow(QWidget *parent)
 
     setWindowIcon(QIcon(":/images/images/qt_main_window_icon.png"));
 
+    const QStringList location = QStandardPaths::standardLocations(QStandardPaths::AppDataLocation);
+    QString db_location = location.at(0);
+
+    if(!QDir(db_location).exists()){
+        QDir().mkdir(db_location);
+    }
+
     QSqlDatabase db = QSqlDatabase::addDatabase("QSQLITE");
-    db.setDatabaseName("E:/To_do/QT6/lexical_analyzer/analysis_report.db");
+    db.setDatabaseName(db_location + "/analysis_report.db");
     database = db;
 
 //    if(!database.open()){
