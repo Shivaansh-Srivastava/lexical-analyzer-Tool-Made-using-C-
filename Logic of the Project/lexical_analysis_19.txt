@@ -1,0 +1,604 @@
+#include<iostream>
+#include<set>
+#include<algorithm>
+#include<vector>
+#include<string>
+#include<iomanip>
+#include<unordered_map>
+#include<numeric>
+#include<iterator>
+#include<fstream>
+#include<ctype.h>
+#include<regex>
+
+using namespace std;
+
+class Parse
+{
+    set<string> keywords;
+    set<string> brackets;
+    set<string> operators;
+    set<string> delim;
+    set<string> header_files;
+    public:
+    set<string> tokens;//Unique tokens stored in this
+    vector<string> token_count;
+    vector<string> opening,closing;//Helps in balancing brackets test
+    vector<string> line;//To store all the code lines from the file
+    vector<string> errors;//To store all the error messages
+    vector<string> fkeys,fvids,fops,fdelims,fnumids,finids,fheads,fbracks,fsids;
+    int keys,bracks,ops,delims,ids,flagger,counter1,counter2;
+    Parse(int x);
+    bool Iskeyword(string s);
+    bool Isbrackets(string s);
+    bool Isoperator(string s);
+    bool Isdelim(string s);
+    void Register();
+    bool valid_id(string s);
+    string Splitter(string s);
+    bool Isequal(vector<string> a, vector<string> b);
+    void FindError(vector<string> l);
+    void printError(vector<string> e);
+    void addKeyword(string s);
+    void printTokens();
+    bool IsComment(string line);
+    int IsMultiComment(string line);
+    void commentBalance();//To see for comments balance
+    void scolanCheck(vector<string> line);//New: Checks for missing semi colans in the code
+};
+
+Parse::Parse(int x)
+{
+    switch(x)
+    {
+        case 1://c++
+            keywords={"int","char","float","class","struct","new","delete","static","if","else","for","while","vector","string","double","continue","break","goto","void","return","set","unordered_map","map","sizeof","cout","cin","main","endl","#include","using","namespace","std","public","private","protected"};
+            break;
+        case 2://c
+            keywords={"int","char","float","struct","if","else","for","while","double","continue","break","goto","void","return","sizeof","malloc","calloc","printf","scanf","main","#include"};
+            break;
+        case 3://JavaScript
+            keywords={"val","let","alert","prompt","console","log","document","element","getElementById","const","Object","Array","function","class","extends"};
+            break;
+        case 4://Python
+            keywords={"eval","def","if","else","for","range","input","print","return","while","class"};
+    }
+    brackets={"(",")","{","}","[","]"};
+    operators={"+","-","*","/","%","=","<",">",".","++","--","<<",">>"};
+    delim={",",";",":"};
+    keys=0;
+    bracks=0;
+    ops=0;
+    delims=0;
+    ids=0;
+    flagger=0;
+    counter1=0;
+    counter2=0;
+}
+
+//To check for keywords
+bool Parse::Iskeyword(string s)
+{
+    auto it=keywords.find(s);
+    if(it!=keywords.end())
+    {
+        //token_count.push_back(s);
+        return true;
+    }
+    else
+    return false;
+}
+
+//To check for operators
+bool Parse::Isoperator(string s)
+{
+    auto it=operators.find(s);
+    if(it!=operators.end())
+    {
+        //token_count.push_back(s);
+        return true;
+    }
+    else
+    return false;
+}
+
+//To check for brackets
+bool Parse::Isbrackets(string s)
+{
+    auto it=brackets.find(s);
+    if(it!=brackets.end())
+    {
+        //token_count.push_back(s);
+        return true;
+    }
+    else
+    return false;
+}
+
+//To check for delimiters
+bool Parse::Isdelim(string s)
+{
+    auto it=delim.find(s);
+    if(it!=delim.end())
+    {
+        //token_count.push_back(s);
+        return true;
+    }
+    else
+    {
+        return false;
+    }
+}
+
+//Count of different types of tokens
+void Parse::Register()
+{
+    cout<<"Keywords: "<<keys<<endl;
+    cout<<"Operators: "<<ops<<endl;
+    cout<<"Brackets: "<<bracks<<endl;
+    cout<<"Delimiters: "<<delims<<endl;
+    cout<<"Identifiers: "<<ids<<endl;
+    cout<<"---------------------------------"<<endl;
+    cout<<"Total tokens: "<<token_count.size()<<endl;
+}
+
+//Function to check for valid identifiers
+bool Parse::valid_id(string s)
+{
+    if(!(s[0]=='_' || (s[0]>='a' && s[0]<='z') || (s[0]>='A' && s[0]<='Z')))
+    {
+        return false;
+    }
+    for(int i=1;i<s.length();i++)
+    {
+        if(!((s[i]>='a' && s[i]<='z') || (s[i]>='A' && s[i]<='Z') || (s[i]>='0' && s[i]<='9') || s[i]=='_'))
+        return false;
+    }
+    return true;
+}
+
+//To split the word properly between identifier and any special symbol
+string Parse::Splitter(string s)
+{
+    //To remove in-line comments
+    int len=s.length();
+    string comment="//";
+    auto itr=s.find(comment);
+    if(itr!=string::npos)
+    {
+        for(int i=itr;i<len;i++)
+        s[i]=' ';
+    }
+    //string fresh of any comments
+    string st;
+    vector<string> extra;
+    for(int i=0;i<s.length();i++)
+    {
+        if(!((s[i]>='a' && s[i]<='z') || (s[i]>='A' && s[i]<='Z') || (s[i]>='0' && s[i]<='9') || s[i]==' ' || s[i]=='#' || s[i]=='"' || s[i]=='.'))
+        {
+            if(s[i]=='<' && s[i+1]=='<')//for <<
+            {
+                extra.push_back("<<");
+                s[i]=' ';
+                s[i+1]=' ';
+            }
+            if(s[i]=='>' && s[i+1]=='>')//for >>
+            {
+                extra.push_back(">>");
+                s[i]=' ';
+                s[i+1]=' ';
+            }
+            if(s[i]=='+' && s[i+1]=='+')//for ++
+            {
+                extra.push_back("++");
+                s[i]=' ';
+                s[i+1]=' ';
+            }
+            if(s[i]=='-' && s[i+1]=='-')//for --
+            {
+                extra.push_back("--");
+                s[i]=' ';
+                s[i+1]=' ';
+            }
+            string str(1,s[i]);
+            extra.push_back(str);
+            s[i]=' ';
+        }
+    }
+    st=s;
+    for(auto it=extra.begin();it!=extra.end();it++)
+    {
+        st=st+" "+(*it);
+    }
+    return st;
+}
+
+//To check for the bracket equality
+bool Parse::Isequal(vector<string> a,vector<string> b)
+{
+    sort(a.begin(),a.end());
+    sort(b.begin(),b.end());
+    int len1=a.size();
+    int len2=b.size();
+    if(len1!=len2)
+    {
+        return false;
+    }
+    int b1,bb1,b2,bb2,b3,bb3;
+    b1=count(a.begin(),a.end(),"(");
+    b2=count(a.begin(),a.end(),"{");
+    b3=count(a.begin(),a.end(),"[");
+    bb1=count(b.begin(),b.end(),")");
+    bb2=count(b.begin(),b.end(),"}");
+    bb3=count(b.begin(),b.end(),"]");
+    if(b1!=bb1)
+    {
+        //cout<<"Error: () brackets are not balanced"<<endl;
+        return false;
+    }
+    if(b2!=bb2)
+    {
+        //cout<<"Error: {} brackets are not balanced"<<endl;
+        return false;
+    }
+    if(b3!=bb3)
+    {
+        return false;
+    }
+    return true;
+}
+
+//To find keywords related error
+void Parse::FindError(vector<string> l)
+{
+    regex exp("return[0-9a-zA-Z]+");
+    string word,buff;
+    for(auto it=l.begin();it!=l.end();it++)
+    {
+        vector<string> seq;
+        string tline=(*it);
+        string test("");
+        buff=Splitter(tline);
+        stringstream s(buff);
+        while(s>>word)
+        {
+            seq.push_back(word);
+        }
+        for(auto itr=seq.begin();itr!=seq.end();itr++)
+        {
+            //if((*itr).compare("return0")==0)//changed here
+            if(regex_match((*itr),exp))
+            {
+                errors.push_back("Warning: Possible error at: "+tline);
+            }
+            if(!Iskeyword(*itr))
+            {
+                test=test+(*itr);
+                if(Iskeyword(test))
+                {
+                    errors.push_back("Warning: Possible error at: "+tline);
+                    test.empty();
+                }
+            }
+        }
+        string rev("");
+        //reverse(seq.begin(),seq.end());
+        for(auto itr=seq.rbegin();itr!=seq.rend();itr++)
+        {
+            //cout<<"Outer:"<<*itr<<endl;
+            if(!Iskeyword(*itr) && !(Isoperator(*itr) || Isdelim(*itr) || Isbrackets(*itr)))
+            {
+                if(rev.empty() && !(Isoperator(*itr) || Isdelim(*itr) || Isbrackets(*itr)))
+                {
+                    rev=(*itr);
+                }
+                else
+                {
+                    if(!(Isoperator(*itr) || Isdelim(*itr) || Isbrackets(*itr)))
+                    rev=(*itr)+rev;
+                }
+                //cout<<rev<<endl;
+                if(Iskeyword(rev))
+                {
+                    errors.push_back("Warning: Possible error at: "+tline);
+                    test.empty();
+                }
+            }
+        }
+    }
+    //cout<<"Have visited FindErrors"<<endl;
+}
+
+//To print the error messages
+void Parse::printError(vector<string> e)
+{
+    if(e.size()==0)
+    {
+        cout<<"No errors in the code"<<endl;
+    }
+    else
+    {
+        for(auto it=e.begin();it!=e.end();it++)
+        {
+            cout<<*it<<endl;
+        }
+    }
+}
+
+//To update the keywords set
+void Parse::addKeyword(string s)
+{
+    keywords.insert(s);
+}
+
+//To print the tokens
+void Parse::printTokens()
+{
+    cout<<"Tokens encountered during the Analysis: "<<endl;
+    cout<<"----------------------------------------"<<endl;
+    for(auto it=fheads.begin();it!=fheads.end();it++)
+    {
+        cout<<*it<<": Header file type identifier"<<endl;
+    }
+    for(auto it=fkeys.begin();it!=fkeys.end();it++)
+    {
+        cout<<*it<<": Keyword"<<endl;
+    }
+    for(auto it=fvids.begin();it!=fvids.end();it++)
+    {
+        cout<<*it<<": Valid identifier"<<endl;
+    }
+    for(auto it=fnumids.begin();it!=fnumids.end();it++)
+    {
+        cout<<*it<<": Valid numeric identifier"<<endl;
+    }
+    for(auto it=fsids.begin();it!=fsids.end();it++)
+    {
+        cout<<*it<<": Valid string identifier"<<endl;
+    }
+    for(auto it=fbracks.begin();it!=fbracks.end();it++)
+    {
+        cout<<*it<<": Bracket"<<endl;
+    }
+    for(auto it=fdelims.begin();it!=fdelims.end();it++)
+    {
+        cout<<*it<<": Valid delimiter"<<endl;//identifier changed to delimiter
+    }
+    for(auto it=fops.begin();it!=fops.end();it++)
+    {
+        cout<<*it<<": Operator"<<endl;
+    }
+    for(auto it=finids.begin();it!=finids.end();it++)
+    {
+        cout<<*it<<": Invalid identifier"<<endl;
+    }
+}
+
+//To check for comment line
+bool Parse::IsComment(string line)
+{
+    int i=0;
+    while(line[i]==' ')
+        i++;
+    if(line[i]=='/' && line[i+1]=='/')
+    return true;
+    return false;
+}
+
+
+//To check for multi-line comments
+int Parse::IsMultiComment(string line)//flagger=0 means not multiline, flager=1 means multiline
+{
+    auto itr=line.find("/*");
+    if(itr!=string::npos)
+    {
+        counter1++;
+        flagger=1;
+        return itr;
+    }
+    return -1;
+}
+
+//To check for /*...*/ balance
+void Parse::commentBalance()
+{
+    if(counter1!=counter2)
+    errors.push_back("Warning: You have a /* and */ mismatch or are not equal");
+}
+
+//New: Function to check for semi-colan
+void Parse::scolanCheck(vector<string> line)
+{
+    regex exp("[int,char,void,vector,set,string,float,double,long]+ [a-zA-Z0-9_:]+[\\(]+[\\)]+[\\{]*[\\(]*");
+    set<string> sp={"#include","while","for","struct","class","void","{","}","(",")","if","else","public","private","protected"};
+    string word,buffer;
+    for(auto it=line.begin();it!=line.end();it++)
+    {
+        if(regex_match(*it,exp))
+        {
+            continue;
+        }
+        else
+        {
+            buffer=Splitter(*it);
+            stringstream s(buffer);
+            s>>word;
+            auto itr=sp.find(word);
+            if(itr==sp.end())
+            {
+                string str=(*it);
+                int i=str.length()-1;
+                while(str[i]==' ')
+                i--;
+                if(str[i]!=';')
+                {
+                    errors.push_back("Warning: Missing Semicolan in line- "+str);
+                }
+            }
+        }
+    }
+}
+
+int main()
+{
+    fstream fio;
+    //set<string> tokens;//To store individual tokens
+    int x,i=0,k=0,flag=0;
+    string str,buffer,temp;
+    string searchexp="[a-zA-Z]+[a-zA-Z0-9]*\\.[a-zA-Z0-9._]+";//Regular expression for class objects
+    regex exp(searchexp);
+    string searchexp2="[a-zA-Z]+[a-zA-z0-9]*\\.[a-zA-Z0-9._]+\\[()]";//Regular Expression for class objects
+    regex exp2(searchexp2);
+    string searchexp3="[a-zA-Z]+\\.[h]";
+    regex exp3(searchexp3);
+    regex exp4("[0-9]+");
+    cout<<"Enter your choice of language: 1-C++ 2-C 3-JavaScript 4-Python"<<endl;//Choose between the four languages - C++,C,JavaScript,Python
+    cin>>x;
+    Parse p(x);
+    fio.open("sample.txt",ios::in|ios::out|ios::app);
+    if(!fio.is_open())
+    {
+        cout<<"Error: Could not open the file"<<endl;
+        exit(0);
+    }
+    //Reading the file
+    while(!fio.eof())
+    {
+        getline(fio,str);//Reading individual lines from the file
+        int pos=p.IsMultiComment(str);//To check for multiline comments
+        auto itr=str.find("*/");
+        if(itr!=string::npos)
+        {
+            p.flagger=0;
+            str=str.substr(itr+2,str.length()-1);
+            p.counter2++;
+        }
+        if(p.IsComment(str)==false && (p.flagger==0||(pos!=-1 && p.flagger==1)))//To check if the read line is comment or not
+        {
+            if(pos!=-1 && p.flagger==1)
+            {
+            str=str.substr(0,pos-1);
+            }
+            p.line.push_back(str);
+            buffer=p.Splitter(str);
+            stringstream s(buffer);//Breaking the indiviual line into words
+            string word;
+            while(s>>word)//storing the individual words in tokens set
+            {
+                p.token_count.push_back(word);
+                p.tokens.insert(word);
+                if(word.compare("(")==0 || word.compare("{")==0 || word.compare("[")==0)
+                {
+                    p.opening.push_back(word);
+                }
+                if(word.compare(")")==0 || word.compare("}")==0 || word.compare("]")==0)
+                {
+                    p.closing.push_back(word);
+                }
+            }
+        }
+    }
+    //classifiying the tokens
+    for(auto it=p.tokens.begin();it!=p.tokens.end();it++)
+    {
+        string s=(*it);
+        if(regex_match(s,exp3))
+        {
+            p.fheads.push_back(s);
+            //cout<<s<<": Header File"<<endl;
+            p.ids++;
+        }
+        else if(p.Isoperator(s))
+        {
+            p.fops.push_back(s);
+            //cout<<s<<": Operator"<<endl;
+            p.ops++;
+        }
+        else if(p.Isbrackets(s))
+        {
+            p.fbracks.push_back(s);
+            //cout<<s<<": Bracket"<<endl;
+            p.bracks++;
+        }
+        else if(p.Isdelim(s))
+        {
+            p.fdelims.push_back(s);
+            //cout<<s<<": Delimiter"<<endl;
+            p.delims++;
+        }
+        else if(p.Iskeyword(s))
+        {
+            p.fkeys.push_back(s);
+            //cout<<s<<": Keyword"<<endl;
+            p.keys++;
+        }
+        else if(regex_match(s,exp))//For class objects
+        {
+            p.fvids.push_back(s);
+            //cout<<s<<": Class Object type Identifier"<<endl;
+            p.ids++;
+        }
+        else if(regex_match(s,exp2))//For class objects-2
+        {
+            p.fvids.push_back(s);
+            //cout<<s<<": Class Object type Identifier"<<endl;
+            p.ids++;
+        }
+        else
+        {
+            if(p.valid_id(s))
+            {
+                p.fvids.push_back(s);
+                //cout<<s<<": Valid Identifier"<<endl;
+                p.ids++;
+            }
+            else if(s[0]=='"')
+            {
+                string sub=s.substr(1,s.length()-1);
+                p.fsids.push_back(sub);
+                //cout<<sub<<": String Identifier"<<endl;
+                p.ids++;
+            }
+            else if(s[s.length()-1]=='"')
+            {
+                string sub=s.substr(0,s.length()-1);
+                p.fsids.push_back(sub);
+                //cout<<sub<<": String Identifier"<<endl;
+                p.ids++;
+            }
+            else if(regex_match(s,exp4))
+            {
+                p.fnumids.push_back(s);
+                //cout<<s<<": Numeric Identifier"<<endl;
+                p.ids++;
+            }
+            else
+            {
+                p.finids.push_back(s);
+                //cout<<s<<": Invalid Identifier"<<endl;
+                p.ids++;
+            }
+        }
+    }
+    p.printTokens();
+    cout<<"-------------------------"<<endl;
+    p.Register();//count of all the types of tokens
+    cout<<"-------------------------"<<endl;
+    cout<<"Balancing Bracket test: "<<endl;
+    if(p.Isequal(p.opening,p.closing))//Balancing brackets test
+    {
+        cout<<"Test Passed"<<endl;
+    }
+    else
+    {
+        cout<<"Done"<<endl;
+        p.errors.push_back("Error: You have a balancing brackets issue");
+    }
+    p.scolanCheck(p.line);//New added
+    p.FindError(p.line);
+    p.commentBalance();
+    cout<<"--------------------------"<<endl;
+    cout<<"Error Section: "<<endl;
+    p.printError(p.errors);
+    return 0;
+}
